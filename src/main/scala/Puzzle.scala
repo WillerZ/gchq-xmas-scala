@@ -182,9 +182,11 @@ case object PuzzleBuilder {
     lazy val elements: List[PuzzleElement] = List(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24, e25)
 
     lazy val rleForm: List[(PuzzleElement, Int)] = elements.foldRight[List[(PuzzleElement, Int)]](List.empty) {
-      case (a, (b, x) :: t) if a == b => (a, x + 1) :: t
+      case (a, (b, x) :: t) if a != O && a == b => (a, x + 1) :: t
+      case (O, (▢, x) :: t) => (▢, x + 1) :: t
+      case (▢, (O, x) :: t) => (▢, x + 1) :: t
+      case (O, l) => (▢, 1) :: l
       case (a, l) => (a, 1) :: l
-
     }
   }
 
@@ -297,12 +299,16 @@ case object PuzzleBuilder {
     def apply(vec: List[Row]): Puzzle = vec match {
       case list if list.size == 25 => new Puzzle(list(0), list(1), list(2), list(3), list(4), list(5), list(6), list(7), list(8), list(9), list(10), list(11), list(12), list(13), list(14), list(15), list(16), list(17), list(18), list(19), list(20), list(21), list(22), list(23), list(24))
     }
+
+    def empty: Puzzle = apply(List.fill(25)(Row.empty))
   }
 
   object Row {
     def apply(vec: List[PuzzleElement]): Row = vec match {
       case list if list.size == 25 => new Row(list(0), list(1), list(2), list(3), list(4), list(5), list(6), list(7), list(8), list(9), list(10), list(11), list(12), list(13), list(14), list(15), list(16), list(17), list(18), list(19), list(20), list(21), list(22), list(23), list(24))
     }
+
+    def empty: Row = apply(List.fill(25)(▢))
   }
 
   object ■ extends PuzzleElement {
@@ -313,39 +319,52 @@ case object PuzzleBuilder {
     override def toString = "⬜️ "
   }
 
+  object O extends PuzzleElement {
+    override def toString = "⬜️ "
+  }
+
   val puzzle =
-    (■ | ■ | ■ | ■ | ■ | ■ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ■ | ■ | ■ | ■ | ■ | ■) \\
-      (■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ■ | ■ | ■ | ▢ | ■) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ■ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ■ | ■ | ■ | ▢ | ■) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ■ | ■ | ■ | ▢ | ■) \\
-      (■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■) \\
-      (■ | ■ | ■ | ■ | ■ | ■ | ■ | ▢ | ■ | ▢ | ■ | ▢ | ■ | ▢ | ■ | ▢ | ■ | ▢ | ■ | ■ | ■ | ■ | ■ | ■ | ■) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+    (■ | ■ | ■ | ■ | ■ | ■ | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ■ | ■ | ■ | ■ | ■ | ■ | ■) \\
+      (■ | O | O | O | O | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ■ | O | O | O | O | O | ■) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ■ | O | ■ | ■ | ■ | O | ■) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ■ | ■ | ▢ | ▢ | ▢ | O | ■ | O | ■ | ■ | ■ | O | ■) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ■ | O | ■ | ■ | ■ | O | ■) \\
+      (■ | O | O | O | O | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ■ | O | O | O | O | O | ■) \\
+      (■ | ■ | ■ | ■ | ■ | ■ | ■ | O | ■ | O | ■ | O | ■ | O | ■ | O | ■ | O | ■ | ■ | ■ | ■ | ■ | ■ | ■) \\
+      (O | O | O | O | O | O | O | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | O | O | O | O | O | O | O) \\
       (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ■ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ■ | ■ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
       (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
       (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
       (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
       (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢) \\
-      (▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ■ | ■ | ■ | ■ | ■ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ▢ | ■ | ■) \\
-      (■ | ▢ | ■ | ■ | ■ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ▢ | ▢ | ▢ | ▢ | ▢ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
-      (■ | ■ | ■ | ■ | ■ | ■ | ■ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢)
+      (O | O | O | O | O | O | O | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | ■ | ■ | ■ | ■ | ■ | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | O | O | O | O | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ■ | ■ | ■ | O | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | ■ | O | ■ | ■) \\
+      (■ | O | ■ | ■ | ■ | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | O | O | O | O | O | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢) \\
+      (■ | ■ | ■ | ■ | ■ | ■ | ■ | O | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢ | ▢)
 
   def couldYetBeValid(row: Row, constraints: ConstraintX): Boolean = {
+    val cs = constraints.constraints
     val rowAsConstraints = row.rleForm.collect {
       case (■, x) => x
     }
-    rowAsConstraints.isEmpty || ((constraints.constraints.max >= rowAsConstraints.max) &&
-      (constraints.constraints.sum >= rowAsConstraints.sum))
+    (row.rleForm.head match {
+      case (■, x) => x <= cs.head
+      case _ => true
+    }) &&
+      (row.rleForm.reverse.head match {
+        case (■, x) => x <= cs.reverse.head
+        case _ => true
+      }) &&
+      (rowAsConstraints.isEmpty || ((cs.max >= rowAsConstraints.max) &&
+        (cs.sum >= rowAsConstraints.sum)))
   }
 
   def couldYetBeValid(puzzle: Puzzle, horizontals: ConstraintsX, verticals: ConstraintsX): Boolean = {
@@ -370,40 +389,43 @@ case object PuzzleBuilder {
   }
 
   def solve(puzzle: Puzzle, horizontals: ConstraintsX, verticals: ConstraintsX, guess: (Int, Int)): Option[Puzzle] = {
-    guess match {
-      case (row, column) =>
-        val nextGuess: Puzzle => Option[(Int,Int)] = p => {
-          if ((column < 24) && !valid(p.rows(row), horizontals.constraints(row)) && couldYetBeValid(p.rows(row), horizontals.constraints(row)))
-            Some((row, column + 1))
-          else if ((row < 24) && valid(p.rows(row), horizontals.constraints(row)))
-            Some((row + 1, 0))
-          else
-            None
-        }
-        val r: Option[Puzzle] = puzzle.rows(row).elements(column) match {
-          case ▢ =>
-            val newRow = Row(puzzle.rows(row).elements.updated(column, ■))
-            val newPuzzle: Puzzle = Puzzle(puzzle.rows.updated(row, newRow))
-            if (valid(newPuzzle, horizontals, verticals))
-              {
-                println(s"Solved!!!!1111\n$newPuzzle")
-                Some(newPuzzle)
-              }
-            else if (couldYetBeValid(newPuzzle, horizontals, verticals))
-                {
-                  nextGuess(newPuzzle) flatMap (x => {
-                    solve(newPuzzle, horizontals, verticals, x)
-                  })
-                }
-            else
-              None
-          case _ => None
-        }
-        r match {
-          case None => nextGuess(puzzle) flatMap (x => solve(puzzle, horizontals, verticals, x))
-          case solution => solution
-        }
-    }
+    if (valid(puzzle, horizontals, verticals))
+      Some(puzzle)
+    else
+      guess match {
+	case (row, column) =>
+	  if (column == 0)
+	    println(s"\n$puzzle")
+	  val nextGuess: Puzzle => Option[(Int, Int)] = p => {
+	    if ((column < 24) && !valid(p.rows(row), horizontals.constraints(row)) && couldYetBeValid(p.rows(row), horizontals.constraints(row)))
+	      Some((row, column + 1))
+	    else if ((row < 24) && valid(p.rows(row), horizontals.constraints(row)))
+	      Some((row + 1, 0))
+	    else
+	      None
+	  }
+	  val r: Option[Puzzle] = puzzle.rows(row).elements(column) match {
+	    case ▢ =>
+	      val newRow = Row(puzzle.rows(row).elements.updated(column, ■))
+	      val newPuzzle: Puzzle = Puzzle(puzzle.rows.updated(row, newRow))
+	      if (valid(newPuzzle, horizontals, verticals)) {
+		println(s"Solved!!!!1111\n$newPuzzle")
+		Some(newPuzzle)
+	      }
+	      else if (couldYetBeValid(newPuzzle, horizontals, verticals)) {
+		nextGuess(newPuzzle) flatMap (x => {
+		  solve(newPuzzle, horizontals, verticals, x)
+		})
+	      }
+	      else
+		None
+	    case _ => None
+	  }
+	  r match {
+	    case None => nextGuess(puzzle) flatMap (x => solve(puzzle, horizontals, verticals, x))
+	    case solution => solution
+	  }
+      }
   }
 
   def main(args: Array[String]) {
