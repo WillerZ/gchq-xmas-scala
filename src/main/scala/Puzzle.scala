@@ -20,12 +20,12 @@ case object Row {
   def allVariationsMeetingConstraints(constraints: List[Int]): Seq[Row] = {
     def helper(cs: List[Int], length: Int): Seq[Row] = cs match {
       case Nil => Seq(Row(Seq.fill(length)(Row.CertainlyEmpty)))
-      case h::Nil =>
+      case h :: Nil =>
         val slack = length - h
         val filled = Seq.fill(h)(Row.CertainlyFilled)
-        val empties = (0 to slack).map {a => Seq.fill(a)(Row.CertainlyEmpty)}
+        val empties = (0 to slack).map { a => Seq.fill(a)(Row.CertainlyEmpty) }
         empties.reverse zip empties map { case (before, after) => Row(before ++ filled ++ after) }
-      case h::t =>
+      case h :: t =>
         val maxBefore = length - (cs.sum + cs.size - 1)
         val emptyAfter = Seq(Row.CertainlyEmpty)
         val filled = Seq.fill(h)(Row.CertainlyFilled)
@@ -35,6 +35,13 @@ case object Row {
         }
     }
     helper(constraints, 25)
+  }
+
+  val reduceVariationsToCommonality: (Row, Row) => Row = {
+    case (a, b) => Row(a.entries zip b.entries map {
+      case (a, b) if a == b => a
+      case _ => UncertainContent
+    })
   }
 }
 
@@ -292,32 +299,32 @@ case object PuzzleBuilder {
 
   val R = Row()
 
-  val puzzle = Puzzle.empty
-//      R.■.■.■.■.■.■.■.▢.+.+.+.+.+.+.+.+.+.▢.■.■.■.■.■.■.■ \\
-//      R.■.▢.▢.▢.▢.▢.■.▢.+.+.+.+.+.+.+.+.+.▢.■.▢.▢.▢.▢.▢.■ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.▢.■.▢.■.■.■.▢.■ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.▢.■.▢.■.■.■.▢.■ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.▢.■.▢.■.■.■.▢.■ \\
-//      R.■.▢.▢.▢.▢.▢.■.▢.+.+.+.+.+.+.+.+.+.▢.■.▢.▢.▢.▢.▢.■ \\
-//      R.■.■.■.■.■.■.■.▢.■.▢.■.▢.■.▢.■.▢.■.▢.■.■.■.■.■.■.■ \\
-//      R.▢.▢.▢.▢.▢.▢.▢.▢.+.+.+.+.+.+.+.+.+.▢.▢.▢.▢.▢.▢.▢.▢ \\
-//      R.+.+.+.+.+.+.■.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.■.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.■.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.■.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.+.+.+.+.+.+.■.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.▢.▢.▢.▢.▢.▢.▢.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.■.■.■.■.■.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.▢.▢.▢.▢.▢.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.▢.■.■.■.▢.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.▢.▢.▢.▢.▢.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\
-//      R.■.■.■.■.■.■.■.▢.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+
+  val puzzle = R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.■.■.+.+.+.+.+.+.+.■.■.+.+.+.+.+.+.+.■.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.■.■.+.+.■.+.+.+.■.■.+.+.■.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.■.+.+.+.+.■.+.+.+.+.■.+.+.+.■.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.■.■.+.+.+.+.■.■.+.+.+.+.■.+.+.+.+.■.■.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
+    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+
 
   def couldYetBeValid(puzzle: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator]): Boolean = {
     require(horizontals.size == 25)
@@ -333,12 +340,28 @@ case object PuzzleBuilder {
       (puzzle.columns zip verticals forall { case (a, b) => b.isValid(a) })
   }
 
-  def solve(puzzle: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator], rowIndexesToPermute: Set[Int], columnIndexesToPermute: Set[Int]): Option[Puzzle] = {
-    if (valid(puzzle, horizontals, verticals))
-      Some(puzzle)
-    else if (!couldYetBeValid(puzzle, horizontals, verticals))
+  def solve(puzzleIn: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator], rowIndexesToPermute: Set[Int], columnIndexesToPermute: Set[Int]): Option[Puzzle] = {
+    if (valid(puzzleIn, horizontals, verticals))
+      Some(puzzleIn)
+    else if (!couldYetBeValid(puzzleIn, horizontals, verticals)) {
       None
+    }
     else {
+      @tailrec
+      def fillInWhatWeKnow(puzzle: Puzzle): Puzzle = {
+        import Row.reduceVariationsToCommonality
+        val inRows = puzzle.rows
+        val outPuzzle = Puzzle(Puzzle(puzzle.rows zip horizontals map {
+          case (row, validator) => validator validVariations row reduce reduceVariationsToCommonality
+        }).columns zip verticals map {
+          case (row, validator) => validator validVariations row reduce reduceVariationsToCommonality
+        }).flipped
+        if (outPuzzle.rows == inRows)
+          outPuzzle
+        else
+          fillInWhatWeKnow(outPuzzle)
+      }
+      val puzzle = fillInWhatWeKnow(puzzleIn)
       val bestRowAndScore = rowIndexesToPermute.map(idx => idx -> horizontals(idx).validVariations(puzzle.rows(idx)).size).toList.sortBy(_._2).head
       val bestColAndScore = columnIndexesToPermute.map(idx => idx -> verticals(idx).validVariations(puzzle.columns(idx)).size).toList.sortBy(_._2).head
       val (puz, rowVs, colVs, rowIs, colIs, replaceRow, transform): (Puzzle, List[RowValidator], List[RowValidator], Set[Int], Set[Int], Int, Puzzle => Puzzle) =
