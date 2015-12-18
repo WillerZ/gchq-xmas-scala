@@ -1,11 +1,19 @@
 
 import scala.annotation.tailrec
 
-case object Row {
+case object RowBuilding {
 
-  sealed trait RowEntry
+  sealed trait RowEntry {
+    def ■(): Row = new Row(Seq(this, RowBuilding.■))
 
-  case object CertainlyFilled extends RowEntry {
+    def □(): Row = new Row(Seq(this, RowBuilding.□))
+
+    def ■(e: RowEntry): Row = new Row(Seq(this, RowBuilding.■, e))
+
+    def □(e: RowEntry): Row = new Row(Seq(this, RowBuilding.□, e))
+  }
+
+  case object ■ extends RowEntry {
     override def toString = "⬛️ "
   }
 
@@ -13,88 +21,98 @@ case object Row {
     override def toString = "⬜️ "
   }
 
-  case object UncertainContent extends RowEntry {
+  case object □ extends RowEntry {
     override def toString = "__"
   }
 
+  implicit class Row1(entry: RowEntry) extends Row(Seq(entry))
+
+  class Row(val entries: Seq[RowEntry]) {
+    def ■(): Row = new Row(entries :+ RowBuilding.■)
+
+    def □(): Row = new Row(entries :+ RowBuilding.□)
+
+    def ■(e: RowEntry): Row = new Row(entries :+ RowBuilding.■ :+ e)
+
+    def □(e: RowEntry): Row = new Row(entries :+ RowBuilding.□ :+ e)
+
+    def ::(c: ConstraintBuilding.Constraint) = new ConstrainedRow(entries, c)
+
+    def canBecome(other: Row): Boolean = {
+      require(entries.size == other.entries.size, "Rows cannot change size")
+      entries zip other.entries forall {
+        case (RowBuilding.□, _) => true
+        case (a, b) if a == b => true
+        case _ => false
+      }
+    }
+
+    override def toString = entries mkString ""
+
+    override def equals(other: Any) = other match {
+      case row: Row => entries == row.entries
+      case _ => false
+    }
+  }
+
+  class ConstrainedRow(entries: Seq[RowEntry], val constraints: ConstraintBuilding.Constraint) extends Row(entries)
+
   def allVariationsMeetingConstraints(constraints: List[Int]): Seq[Row] = {
     def helper(cs: List[Int], length: Int): Seq[Row] = cs match {
-      case Nil => Seq(Row(Seq.fill(length)(Row.CertainlyEmpty)))
+      case Nil => Seq(new Row(Seq.fill(length)(CertainlyEmpty)))
       case h :: Nil =>
         val slack = length - h
-        val filled = Seq.fill(h)(Row.CertainlyFilled)
-        val empties = (0 to slack).map { a => Seq.fill(a)(Row.CertainlyEmpty) }
-        empties.reverse zip empties map { case (before, after) => Row(before ++ filled ++ after) }
+        val filled = Seq.fill(h)(■)
+        val empties = (0 to slack).map { a => Seq.fill(a)(CertainlyEmpty) }
+        empties.reverse zip empties map { case (before, after) => new Row(before ++ filled ++ after) }
       case h :: t =>
         val maxBefore = length - (cs.sum + cs.size - 1)
-        val emptyAfter = Seq(Row.CertainlyEmpty)
-        val filled = Seq.fill(h)(Row.CertainlyFilled)
+        val emptyAfter = Seq(CertainlyEmpty)
+        val filled = Seq.fill(h)(■)
         (0 to maxBefore).flatMap {
-          before => val emptyBefore = Seq.fill(before)(Row.CertainlyEmpty)
-            helper(t, length - before - h - 1) map (x => Row(emptyBefore ++ filled ++ emptyAfter ++ x.entries))
+          before => val emptyBefore = Seq.fill(before)(CertainlyEmpty)
+            helper(t, length - before - h - 1) map (x => new Row(emptyBefore ++ filled ++ emptyAfter ++ x.entries))
         }
     }
     helper(constraints, 25)
   }
 
-  val reduceVariationsToCommonality: (Row, Row) => Row = {
-    case (a, b) => Row(a.entries zip b.entries map {
-      case (a, b) if a == b => a
-      case _ => UncertainContent
-    })
-  }
-}
+  class RowValidator(validRows: Seq[Row]) {
+    final def isValid(row: Row): Boolean = validRows.contains(row)
 
-case class Row(entries: Seq[Row.RowEntry] = Seq.empty) {
+    final def couldBeValid(row: Row): Boolean = validVariations(row).nonEmpty
 
-  import Row._
+    final def validVariations(row: Row): Seq[Row] = validRows.collect {
+      case a if row.canBecome(a) => a
+    }
 
-  def ■ = Row(entries :+ CertainlyFilled)
+    final def varietyCount: Int = validRows.size
 
-  def ▢ = Row(entries :+ CertainlyEmpty)
-
-  def + = Row(entries :+ UncertainContent)
-
-  def canBecome(other: Row): Boolean = {
-    entries zip other.entries forall {
-      case (UncertainContent, _) => true
-      case (a, b) if a == b => true
-      case _ => false
+    final def certainties(row: Row): Row = {
+      val reduceVariationsToCommonality: (Row, Row) => Row = {
+        case (a, b) => new Row(a.entries zip b.entries map {
+          case (c, d) if c == d => c
+          case _ => □
+        })
+      }
+      validVariations(row).reduce(reduceVariationsToCommonality)
     }
   }
 
-  override def toString = {
-    entries.foldLeft[String]("")({ case (accum, entry) => accum + entry.toString })
-  }
 }
-
-class RowValidator(validRows: Seq[Row]) {
-  final def isValid(row: Row): Boolean = validRows.contains(row)
-
-  final def couldBeValid(row: Row): Boolean = validVariations(row).nonEmpty
-
-  final def validVariations(row: Row): Seq[Row] = validRows.collect {
-    case a if row.canBecome(a) => a
-  }
-
-  final def varietyCount: Int = validRows.size
-}
-
 
 case object ConstraintBuilding {
 
-  implicit class Constraint1(val c1: Int) {
-    def ~(c: Int) = new ConstraintX(List(c1, c))
+  implicit class Constraint1(c1: Int) extends Constraint(List(c1))
+
+  class Constraint(val constraints: List[Int]) {
+    def ~(c: Int) = new Constraint(constraints :+ c)
+
+    def \\(constraint: Constraint) = new ConstraintsX(List(this, constraint))
   }
 
-  class ConstraintX(val constraints: List[Int]) {
-    def ~(c: Int) = new ConstraintX(constraints :+ c)
-
-    def \\(constraintX: ConstraintX) = new ConstraintsX(List(this, constraintX))
-  }
-
-  class ConstraintsX(val constraints: List[ConstraintX]) {
-    def \\(constraintX: ConstraintX) = new ConstraintsX(constraints :+ constraintX)
+  class ConstraintsX(val constraints: List[Constraint]) {
+    def \\(constraintX: Constraint) = new ConstraintsX(constraints :+ constraintX)
   }
 
   def asConstraints(row: Int): List[Int] = {
@@ -115,9 +133,9 @@ case object ConstraintBuilding {
     helper(row, 0, 0, List.empty[Int])
   }
 
-  final val (horizontals, verticals): (List[RowValidator], List[RowValidator]) = {
-    import Row.{CertainlyFilled, CertainlyEmpty, RowEntry}
+  import RowBuilding._
 
+  final val (horizontals, verticals): (List[RowValidator], List[RowValidator]) = {
     val hc = ((7 ~ 3 ~ 1 ~ 1 ~ 7) \\
       (1 ~ 1 ~ 2 ~ 2 ~ 1 ~ 1) \\
       (1 ~ 3 ~ 1 ~ 3 ~ 1 ~ 1 ~ 3 ~ 1) \\
@@ -168,179 +186,59 @@ case object ConstraintBuilding {
       (1 ~ 3 ~ 1 ~ 4 ~ 3 ~ 3) \\
       (1 ~ 1 ~ 2 ~ 2 ~ 2 ~ 6 ~ 1) \\
       (7 ~ 1 ~ 3 ~ 2 ~ 1 ~ 1)).constraints map (_.constraints)
-    val allv = (hc ++ vc).distinct.map(a => a -> new RowValidator(scala.util.Random.shuffle(Row.allVariationsMeetingConstraints(a)))).toMap
+    val allv = (hc ++ vc).distinct.map(a => a -> new RowValidator(scala.util.Random.shuffle(allVariationsMeetingConstraints(a)))).toMap
     (hc map allv, vc map allv)
   }
 }
 
-case object PuzzleBuilder {
+case object PuzzleBuilding {
 
-  implicit class Puzzle1(e1: Row) {
-    def \\(e: Row) = new Puzzle2(e1, e)
-  }
+  import RowBuilding._
 
-  class Puzzle2(e1: Row, e2: Row) {
-    def \\(e: Row) = new Puzzle3(e1, e2, e)
-  }
+  implicit class Puzzle1(e1: Row) extends Puzzle(Seq(e1))
 
-  class Puzzle3(e1: Row, e2: Row, e3: Row) {
-    def \\(e: Row) = new Puzzle4(e1, e2, e3, e)
-  }
+  class Puzzle(val rows: Seq[Row]) {
+    require(rows.nonEmpty, "Puzzles must have at least one row")
+    require(rows.map(_.entries.size).distinct.size == 1, "Puzzles must be rectangular")
 
-  class Puzzle4(e1: Row, e2: Row, e3: Row, e4: Row) {
-    def \\(e: Row) = new Puzzle5(e1, e2, e3, e4, e)
-  }
-
-  class Puzzle5(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row) {
-    def \\(e: Row) = new Puzzle6(e1, e2, e3, e4, e5, e)
-  }
-
-  class Puzzle6(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row) {
-    def \\(e: Row) = new Puzzle7(e1, e2, e3, e4, e5, e6, e)
-  }
-
-  class Puzzle7(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row) {
-    def \\(e: Row) = new Puzzle8(e1, e2, e3, e4, e5, e6, e7, e)
-  }
-
-  class Puzzle8(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row) {
-    def \\(e: Row) = new Puzzle9(e1, e2, e3, e4, e5, e6, e7, e8, e)
-  }
-
-  class Puzzle9(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row) {
-    def \\(e: Row) = new Puzzle10(e1, e2, e3, e4, e5, e6, e7, e8, e9, e)
-  }
-
-  class Puzzle10(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row) {
-    def \\(e: Row) = new Puzzle11(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e)
-  }
-
-  class Puzzle11(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row) {
-    def \\(e: Row) = new Puzzle12(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e)
-  }
-
-  class Puzzle12(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row) {
-    def \\(e: Row) = new Puzzle13(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e)
-  }
-
-  class Puzzle13(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row) {
-    def \\(e: Row) = new Puzzle14(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e)
-  }
-
-  class Puzzle14(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row) {
-    def \\(e: Row) = new Puzzle15(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e)
-  }
-
-  class Puzzle15(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row) {
-    def \\(e: Row) = new Puzzle16(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e)
-  }
-
-  class Puzzle16(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row) {
-    def \\(e: Row) = new Puzzle17(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e)
-  }
-
-  class Puzzle17(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row) {
-    def \\(e: Row) = new Puzzle18(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e)
-  }
-
-  class Puzzle18(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row) {
-    def \\(e: Row) = new Puzzle19(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e)
-  }
-
-  class Puzzle19(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row) {
-    def \\(e: Row) = new Puzzle20(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e)
-  }
-
-  class Puzzle20(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row) {
-    def \\(e: Row) = new Puzzle21(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e)
-  }
-
-  class Puzzle21(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row, e21: Row) {
-    def \\(e: Row) = new Puzzle22(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e)
-  }
-
-  class Puzzle22(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row, e21: Row, e22: Row) {
-    def \\(e: Row) = new Puzzle23(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e)
-  }
-
-  class Puzzle23(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row, e21: Row, e22: Row, e23: Row) {
-    def \\(e: Row) = new Puzzle24(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e)
-  }
-
-  class Puzzle24(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row, e21: Row, e22: Row, e23: Row, e24: Row) {
-    def \\(e: Row) = new Puzzle(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24, e)
-  }
-
-  class Puzzle(e1: Row, e2: Row, e3: Row, e4: Row, e5: Row, e6: Row, e7: Row, e8: Row, e9: Row, e10: Row, e11: Row, e12: Row, e13: Row, e14: Row, e15: Row, e16: Row, e17: Row, e18: Row, e19: Row, e20: Row, e21: Row, e22: Row, e23: Row, e24: Row, e25: Row) {
-    override def toString = s"$e1\n$e2\n$e3\n$e4\n$e5\n$e6\n$e7\n$e8\n$e9\n$e10\n$e11\n$e12\n$e13\n$e14\n$e15\n$e16\n$e17\n$e18\n$e19\n$e20\n$e21\n$e22\n$e23\n$e24\n$e25"
-
-    lazy val rows: List[Row] = List(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22, e23, e24, e25)
-
-    lazy val columns: List[Row] = {
-      val l = (0 to 24).map(column => {
-        Row(rows.map({
+    val columns: Seq[Row] = {
+      val l = rows.head.entries.indices.map(column => {
+        new Row(rows.map({
           case row => row.entries(column)
         }))
-      }).toList
-      require(l.size == 25)
+      }).toSeq
       l
     }
 
-    def flipped: Puzzle = Puzzle(columns)
+    def &(e: Row) = new Puzzle(rows :+ e)
+
+    override def toString = rows mkString "\n"
+
+    def flipped: Puzzle = new Puzzle(columns)
   }
 
   object Puzzle {
-    def apply(vec: List[Row]): Puzzle = vec match {
-      case list if list.size == 25 => new Puzzle(list(0), list(1), list(2), list(3), list(4), list(5), list(6), list(7), list(8), list(9), list(10), list(11), list(12), list(13), list(14), list(15), list(16), list(17), list(18), list(19), list(20), list(21), list(22), list(23), list(24))
-    }
+    def empty(size: Int): Puzzle = new Puzzle(List.fill(size)(new Row(Seq.fill(size)(□))))
 
-    def empty: Puzzle = apply(List.fill(25)(Row(Seq.fill(25)(Row.UncertainContent))))
+    def empty(rows: Int, columns: Int): Puzzle = new Puzzle(List.fill(rows)(new Row(Seq.fill(columns)(□))))
   }
 
-  val R = Row()
-
-  val puzzle = R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.■.■.+.+.+.+.+.+.+.■.■.+.+.+.+.+.+.+.■.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.■.■.+.+.■.+.+.+.■.■.+.+.■.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.■.+.+.+.+.■.+.+.+.+.■.+.+.+.■.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.■.■.+.+.+.+.■.■.+.+.+.+.■.+.+.+.+.■.■.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+ \\ R.
-    +.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+.+
-
   def couldYetBeValid(puzzle: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator]): Boolean = {
-    require(horizontals.size == 25)
-    require(verticals.size == 25)
     (puzzle.rows zip horizontals forall { case (a, b) => b.couldBeValid(a) }) &&
       (puzzle.columns zip verticals forall { case (a, b) => b.couldBeValid(a) })
   }
 
   def valid(puzzle: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator]): Boolean = {
-    require(horizontals.size == 25)
-    require(verticals.size == 25)
+    require(horizontals.size == puzzle.rows.size)
+    require(verticals.size == puzzle.columns.size)
     (puzzle.rows zip horizontals forall { case (a, b) => b.isValid(a) }) &&
       (puzzle.columns zip verticals forall { case (a, b) => b.isValid(a) })
   }
 
   def solve(puzzleIn: Puzzle, horizontals: List[RowValidator], verticals: List[RowValidator], rowIndexesToPermute: Set[Int], columnIndexesToPermute: Set[Int]): Option[Puzzle] = {
+    println(puzzleIn)
+    require(puzzleIn.rows.size == horizontals.size, "Must have as many row constraints as rows")
+    require(puzzleIn.columns.size == verticals.size, "Must have as many column constraints as columns")
     if (valid(puzzleIn, horizontals, verticals))
       Some(puzzleIn)
     else if (!couldYetBeValid(puzzleIn, horizontals, verticals)) {
@@ -349,12 +247,11 @@ case object PuzzleBuilder {
     else {
       @tailrec
       def fillInWhatWeKnow(puzzle: Puzzle): Puzzle = {
-        import Row.reduceVariationsToCommonality
         val inRows = puzzle.rows
-        val outPuzzle = Puzzle(Puzzle(puzzle.rows zip horizontals map {
-          case (row, validator) => validator validVariations row reduce reduceVariationsToCommonality
+        val outPuzzle = new Puzzle(new Puzzle(puzzle.rows zip horizontals map {
+          case (row, validator) => validator certainties row
         }).columns zip verticals map {
-          case (row, validator) => validator validVariations row reduce reduceVariationsToCommonality
+          case (row, validator) => validator certainties row
         }).flipped
         if (outPuzzle.rows == inRows)
           outPuzzle
@@ -362,6 +259,7 @@ case object PuzzleBuilder {
           fillInWhatWeKnow(outPuzzle)
       }
       val puzzle = fillInWhatWeKnow(puzzleIn)
+      println(puzzle)
       val bestRowAndScore = rowIndexesToPermute.map(idx => idx -> horizontals(idx).validVariations(puzzle.rows(idx)).size).toList.sortBy(_._2).head
       val bestColAndScore = columnIndexesToPermute.map(idx => idx -> verticals(idx).validVariations(puzzle.columns(idx)).size).toList.sortBy(_._2).head
       val (puz, rowVs, colVs, rowIs, colIs, replaceRow, transform): (Puzzle, List[RowValidator], List[RowValidator], Set[Int], Set[Int], Int, Puzzle => Puzzle) =
@@ -370,11 +268,50 @@ case object PuzzleBuilder {
         else
           (puzzle.flipped, verticals, horizontals, columnIndexesToPermute, rowIndexesToPermute, bestColAndScore._1, { a: Puzzle => a.flipped })
       rowVs(replaceRow).validVariations(puz.rows(replaceRow)).foldLeft[Option[Puzzle]](None)({
-        case (None, candidate) => solve(Puzzle(puz.rows.updated(replaceRow, candidate)), rowVs, colVs, rowIs - replaceRow, colIs)
+        case (None, candidate) => solve(new Puzzle(puz.rows.updated(replaceRow, candidate)), rowVs, colVs, rowIs - replaceRow, colIs)
         case (solution, _) => solution
       }).map(transform)
     }
   }
+
+}
+
+object Solve {
+
+  import RowBuilding._
+
+  import PuzzleBuilding._
+
+  import ConstraintBuilding._
+
+  // @formatter:off
+  val puzzle =
+                7 ~ 3 ~ 1 ~ 1 ~ 7 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            1 ~ 1 ~ 2 ~ 2 ~ 1 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+    1 ~ 3 ~ 1 ~ 3 ~ 1 ~ 1 ~ 3 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+    1 ~ 3 ~ 1 ~ 1 ~ 6 ~ 1 ~ 3 ~ 1 :: □ □ □ ■ ■ □ □ □ □ □ □ □ ■ ■ □ □ □ □ □ □ □ ■ □ □ □ &
+    1 ~ 3 ~ 1 ~ 5 ~ 2 ~ 1 ~ 3 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+                1 ~ 1 ~ 2 ~ 1 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+        7 ~ 1 ~ 1 ~ 1 ~ 1 ~ 1 ~ 7 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+                            3 ~ 3 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+1 ~ 2 ~ 3 ~ 1 ~ 1 ~ 3 ~ 1 ~ 1 ~ 2 :: □ □ □ □ □ □ ■ ■ □ □ ■ □ □ □ ■ ■ □ □ ■ □ □ □ □ □ □ &
+            1 ~ 1 ~ 3 ~ 2 ~ 1 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            4 ~ 1 ~ 4 ~ 2 ~ 1 ~ 2 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+    1 ~ 1 ~ 1 ~ 1 ~ 1 ~ 4 ~ 1 ~ 3 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            2 ~ 1 ~ 1 ~ 1 ~ 2 ~ 5 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            3 ~ 2 ~ 2 ~ 6 ~ 3 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            1 ~ 9 ~ 1 ~ 1 ~ 2 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+            2 ~ 1 ~ 2 ~ 2 ~ 3 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+        3 ~ 1 ~ 1 ~ 1 ~ 1 ~ 5 ~ 1 :: □ □ □ □ □ □ ■ □ □ □ □ ■ □ □ □ □ ■ □ □ □ ■ □ □ □ □ &
+                    1 ~ 2 ~ 2 ~ 5 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+	7 ~ 1 ~ 2 ~ 1 ~ 1 ~ 1 ~ 3 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+	1 ~ 1 ~ 2 ~ 1 ~ 2 ~ 2 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+	    1 ~ 3 ~ 1 ~ 4 ~ 5 ~ 1 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+	   1 ~ 3 ~ 1 ~ 3 ~ 10 ~ 2 :: □ □ □ ■ ■ □ □ □ □ ■ ■ □ □ □ □ ■ □ □ □ □ ■ ■ □ □ □ &
+	    1 ~ 3 ~ 1 ~ 1 ~ 6 ~ 6 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+	    1 ~ 1 ~ 2 ~ 1 ~ 1 ~ 2 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ &
+		7 ~ 2 ~ 1 ~ 2 ~ 5 :: □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □ □
+  // @formatter:on
 
   def main(args: Array[String]) {
     val rowIndexSet = ConstraintBuilding.horizontals.indices.toSet
