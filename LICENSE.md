@@ -1,0 +1,1 @@
+Do what you want with this code, but you don't get to blame me for anything.
